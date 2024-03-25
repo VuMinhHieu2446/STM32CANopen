@@ -60,8 +60,6 @@ FDCAN_TxHeaderTypeDef   TxHeader;
 FDCAN_RxHeaderTypeDef   RxHeader;
 uint8_t               TxData[8];
 uint8_t               RxData[8];
-int indx = 0;
-uint32_t TxMailbox;
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
@@ -79,6 +77,41 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
       Error_Handler();
     }
   }
+}
+
+/*
+ * @brief: Convert from CAN frame to CANopen Frame
+ * @param: id: Node ID
+ * @param: index: 2bytes index + 1byte sub index
+ * @param: data: maximum 4bytes of transceiving data
+ * @param: len: data lenght, maximum 4 bytes
+ * @param: rw: 0 to read (x40), 1 to write (x20)
+ * @reval: HAL_Status
+ */
+
+HAL_StatusTypeDef CANopenSendSDO(uint8_t id, uint8_t command_byte, uint32_t index, uint32_t data, uint8_t len, uint8_t rw)
+{
+	uint8_t txbuf[8];
+	TxHeader.DataLength = FDCAN_DLC_BYTES_8;	// so byte data truyen di la 8
+	TxHeader.IdType = FDCAN_STANDARD_ID;		// standard ID
+	TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
+	TxHeader.FDFormat = FDCAN_CLASSIC_CAN;		//choose transmit frame
+	TxHeader.MessageMarker = 0;
+	TxHeader.Identifier = 0x600+id;				//Specific ID
+	TxHeader.TxFrameType = FDCAN_DATA_FRAME;				//Data_frame
+	TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+	TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+
+	txbuf[0] = command_byte;
+	txbuf[1] = (index>>8)&0xff;		//index
+	txbuf[2] = (index>>16)&0xff;	//index
+	txbuf[3] = index&0xff;			//sub_index
+
+	txbuf[4] = data & 0xff;
+	txbuf[5] = (data>>8)&0xff;
+	txbuf[6] = (data>>16)&0xff;
+	txbuf[7] = (data>>24)&0xff;
+	return HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, txbuf);
 }
 /* USER CODE END 0 */
 
@@ -105,28 +138,13 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-//  	  TxHeader.Identifier = 0x601;  	// NodeID
-//  	  TxData[0] = 0x40;					// Data 40 64 60 de doc gia tri tu encoder
-//  	  TxData[1] = 0x03;
-//  	  TxData[2] = 0x60;
-//  	  sFilterConfig.FilterID1 = 0x601;	// Filter chi nhan ID 0x601 vao RxFIFO_0
-//  	  sFilterConfig.FilterID2 = 0x601;
+
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_FDCAN1_Init();
   /* USER CODE BEGIN 2 */
-  TxHeader.DataLength = FDCAN_DLC_BYTES_8;	// so byte data truyen di la 8
-  TxHeader.IdType = FDCAN_STANDARD_ID;		// standard ID
-  TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
-  TxHeader.FDFormat = FDCAN_CLASSIC_CAN;		//choose transmit frame
-  TxHeader.MessageMarker = 0;
-  TxHeader.Identifier = 0x601;				//Specific ID
-  TxHeader.TxFrameType = FDCAN_DATA_FRAME;				//Data_frame
-  TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-  TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-
 if(HAL_FDCAN_Start(&hfdcan1)!= HAL_OK)
  {
 	  Error_Handler();
@@ -136,6 +154,79 @@ if(HAL_FDCAN_Start(&hfdcan1)!= HAL_OK)
    /* Notification Error */
    Error_Handler();
  }
+ //Switch On Disabled (basic state)
+ CANopenSendSDO(1,0x2B, 0x604000, 0x00, 4, 1);
+ HAL_Delay(100);
+
+// //Request of the status word
+//  CANopenSendSDO(1,0x40, 0x604100, 0x00, 4, 1);
+//   HAL_Delay(5000);
+
+// Ready to Switch On
+ CANopenSendSDO(1,0x2B, 0x604000, 0x06, 4, 1);
+ HAL_Delay(100);
+
+// //Request of the status word
+//  CANopenSendSDO(1,0x40, 0x604100, 0x00, 4, 1);
+//   HAL_Delay(5000);
+
+ //Switch On (power drive on)
+ CANopenSendSDO(1,0x2B, 0x604000, 0x07, 4, 1);
+ HAL_Delay(100);
+
+ //Operation Enabled
+ CANopenSendSDO(1,0x2B, 0x604000, 0x0F, 4, 1);			// dong co da chuyen sang mode run duoc roi anh a
+ HAL_Delay(100);
+
+// //Request of the status word
+// CANopenSendSDO(1,0x40, 0x604100, 0x00, 4, 1);
+//  HAL_Delay(5000);
+
+// //Mode: Profile Position (PP)
+// CANopenSendSDO(1,0x2F, 0x606000, 0x01, 4, 1);
+// HAL_Delay(2000);
+//
+// //End position to 0x12345
+// CANopenSendSDO(1,0x27, 0x607A00, 0x12345, 4, 1);
+//  HAL_Delay(100);
+//
+//// Start of a movement
+// CANopenSendSDO(1,0x2F, 0x604000, 0x1F, 4, 1);
+// HAL_Delay(100);
+////
+//// Reset of the start bit
+// CANopenSendSDO(1,0x2F, 0x604000, 0x0F, 4, 1);
+// HAL_Delay(100);
+
+//  Mode: Torque
+  CANopenSendSDO(1,0x2F, 0x606000, 0x04, 4, 1);
+  HAL_Delay(100);
+
+//  Target torque
+  CANopenSendSDO(1,0x2B, 0x607100, 0x150, 4, 1);
+  HAL_Delay(100);
+
+// Start of a movement
+  CANopenSendSDO(1,0x2F, 0x604000, 0x1F, 4, 1);
+  HAL_Delay(100);
+
+// Reset of the start bit
+  CANopenSendSDO(1,0x2F, 0x604000, 0x0F, 4, 1);
+  HAL_Delay(100);
+
+  HAL_Delay(5000);
+
+//  Target torque
+  CANopenSendSDO(1,0x2B, 0x607100, 0x0, 4, 1);
+  HAL_Delay(100);
+
+// Start of a movement
+	CANopenSendSDO(1,0x2F, 0x604000, 0x1F, 4, 1);
+	HAL_Delay(100);
+
+// Reset of the start bit
+	CANopenSendSDO(1,0x2F, 0x604000, 0x0F, 4, 1);
+	HAL_Delay(100);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -145,16 +236,16 @@ if(HAL_FDCAN_Start(&hfdcan1)!= HAL_OK)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  TxData[0] = 0x40;
-	  TxData[1] = 0x64;
-	  TxData[2] = 0x60;
-	  TxData[3] = 0;
-	  TxData[4] = 0x00;
-	  TxData[5] = 0x00;
-	  TxData[6] = 0;
-	  TxData[7] = 0;
-	  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
-//	  HAL_FDCAN_AddMessageToTxBuffer(&hfdcan1, &Txheader, data, TxMailbox);
+//	  TxData[0] = 0x23;
+//	  TxData[1] = 0x11;
+//	  TxData[2] = 0x10;
+//	  TxData[3] = 0x01;
+//	  TxData[4] = 0x6C;
+//	  TxData[5] = 0x6F;
+//	  TxData[6] = 0x61;
+//	  TxData[7] = 0x64;
+//	  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
+//	  CANopenSendSDO(1,0x22, 0x60FF00, 0xFFFF, 0, 1);
 	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_8);
 	  HAL_Delay(1000);
   }
@@ -252,7 +343,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.MessageRAMOffset = 0;
   hfdcan1.Init.StdFiltersNbr = 1;
   hfdcan1.Init.ExtFiltersNbr = 0;
-  hfdcan1.Init.RxFifo0ElmtsNbr = 1;
+  hfdcan1.Init.RxFifo0ElmtsNbr = 64;
   hfdcan1.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_8;
   hfdcan1.Init.RxFifo1ElmtsNbr = 0;
   hfdcan1.Init.RxFifo1ElmtSize = FDCAN_DATA_BYTES_8;
@@ -274,7 +365,7 @@ FDCAN_FilterTypeDef sFilterConfig;
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;
   sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-  sFilterConfig.FilterID1 = 0x582;
+  sFilterConfig.FilterID1 = 0x581;
   sFilterConfig.FilterID2 = 0x7FF;
   sFilterConfig.RxBufferIndex = 0;
   if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK)
