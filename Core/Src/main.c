@@ -18,10 +18,20 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include "CO_app_STM32.h"
+#include "CANopen.h"
+#include "OD.h"
+#include "../CANopenNode/301/CO_driver.h"
 
+#include "CO_app_user.h"
+#include "usb_cdc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +41,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -42,6 +53,10 @@
 
 FDCAN_HandleTypeDef hfdcan1;
 
+RNG_HandleTypeDef hrng;
+
+TIM_HandleTypeDef htim14;
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -50,69 +65,29 @@ FDCAN_HandleTypeDef hfdcan1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_FDCAN1_Init(void);
+static void MX_TIM14_Init(void);
+static void MX_RNG_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-FDCAN_TxHeaderTypeDef   TxHeader;
-FDCAN_RxHeaderTypeDef   RxHeader;
-uint8_t               TxData[8];
-uint8_t               RxData[8];
+char usb_buffer[100];
+uint8_t usb_len;
+uint8_t usb_flag= 0;
 
-void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
-{
-  if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
-  {
-    /* Retreive Rx messages from RX FIFO0 */
-    if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK)
-    {
-    /* Reception Error */
-    Error_Handler();
+uint32_t tmp = 0x00;
+uint8_t amount_read = 0;
+/* Timer interrupt function executes every 1 ms */
+void
+HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim) {
+    if (htim == canopenNodeSTM32->timerHandle) {
+        canopen_app_interrupt();
     }
-    if (HAL_FDCAN_ActivateNotification(hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
-    {
-      /* Notification Error */
-      Error_Handler();
-    }
-  }
 }
 
-/*
- * @brief: Convert from CAN frame to CANopen Frame
- * @param: id: Node ID
- * @param: index: 2bytes index + 1byte sub index
- * @param: data: maximum 4bytes of transceiving data
- * @param: len: data lenght, maximum 4 bytes
- * @param: rw: 0 to read (x40), 1 to write (x20)
- * @reval: HAL_Status
- */
-
-HAL_StatusTypeDef CANopenSendSDO(uint8_t id, uint8_t command_byte, uint32_t index, uint32_t data, uint8_t len, uint8_t rw)
-{
-	uint8_t txbuf[8];
-	TxHeader.DataLength = FDCAN_DLC_BYTES_8;	// so byte data truyen di la 8
-	TxHeader.IdType = FDCAN_STANDARD_ID;		// standard ID
-	TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
-	TxHeader.FDFormat = FDCAN_CLASSIC_CAN;		//choose transmit frame
-	TxHeader.MessageMarker = 0;
-	TxHeader.Identifier = 0x600+id;				//Specific ID
-	TxHeader.TxFrameType = FDCAN_DATA_FRAME;				//Data_frame
-	TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-	TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
-
-	txbuf[0] = command_byte;
-	txbuf[1] = (index>>8)&0xff;		//index
-	txbuf[2] = (index>>16)&0xff;	//index
-	txbuf[3] = index&0xff;			//sub_index
-
-	txbuf[4] = data & 0xff;
-	txbuf[5] = (data>>8)&0xff;
-	txbuf[6] = (data>>16)&0xff;
-	txbuf[7] = (data>>24)&0xff;
-	return HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, txbuf);
-}
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef* hfdcan, uint32_t RxFifo0ITs);
 /* USER CODE END 0 */
 
 /**
@@ -144,89 +119,25 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_FDCAN1_Init();
+  MX_TIM14_Init();
+  MX_RNG_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-if(HAL_FDCAN_Start(&hfdcan1)!= HAL_OK)
- {
-	  Error_Handler();
- }
- if (HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK)
- {
-   /* Notification Error */
-   Error_Handler();
- }
- //Switch On Disabled (basic state)
- CANopenSendSDO(1,0x2B, 0x604000, 0x00, 4, 1);
- HAL_Delay(100);
+  CANopenNodeSTM32 canopenNode_1;
 
-// //Request of the status word
-//  CANopenSendSDO(1,0x40, 0x604100, 0x00, 4, 1);
-//   HAL_Delay(5000);
+  canopen_app_user_init(&canopenNode_1,
+  							&hfdcan1,
+							&MX_FDCAN1_Init,
+							&htim14);
 
-// Ready to Switch On
- CANopenSendSDO(1,0x2B, 0x604000, 0x06, 4, 1);
- HAL_Delay(100);
 
-// //Request of the status word
-//  CANopenSendSDO(1,0x40, 0x604100, 0x00, 4, 1);
-//   HAL_Delay(5000);
-
- //Switch On (power drive on)
- CANopenSendSDO(1,0x2B, 0x604000, 0x07, 4, 1);
- HAL_Delay(100);
-
- //Operation Enabled
- CANopenSendSDO(1,0x2B, 0x604000, 0x0F, 4, 1);			// dong co da chuyen sang mode run duoc roi anh a
- HAL_Delay(100);
-
-// //Request of the status word
-// CANopenSendSDO(1,0x40, 0x604100, 0x00, 4, 1);
-//  HAL_Delay(5000);
-
-// //Mode: Profile Position (PP)
-// CANopenSendSDO(1,0x2F, 0x606000, 0x01, 4, 1);
-// HAL_Delay(2000);
-//
-// //End position to 0x12345
-// CANopenSendSDO(1,0x27, 0x607A00, 0x12345, 4, 1);
-//  HAL_Delay(100);
-//
-//// Start of a movement
-// CANopenSendSDO(1,0x2F, 0x604000, 0x1F, 4, 1);
-// HAL_Delay(100);
-////
-//// Reset of the start bit
-// CANopenSendSDO(1,0x2F, 0x604000, 0x0F, 4, 1);
-// HAL_Delay(100);
-
-//  Mode: Torque
-  CANopenSendSDO(1,0x2F, 0x606000, 0x04, 4, 1);
-  HAL_Delay(100);
-
-//  Target torque
-  CANopenSendSDO(1,0x2B, 0x607100, 0x150, 4, 1);
-  HAL_Delay(100);
-
-// Start of a movement
-  CANopenSendSDO(1,0x2F, 0x604000, 0x1F, 4, 1);
-  HAL_Delay(100);
-
-// Reset of the start bit
-  CANopenSendSDO(1,0x2F, 0x604000, 0x0F, 4, 1);
-  HAL_Delay(100);
-
-  HAL_Delay(5000);
-
-//  Target torque
-  CANopenSendSDO(1,0x2B, 0x607100, 0x0, 4, 1);
-  HAL_Delay(100);
-
-// Start of a movement
-	CANopenSendSDO(1,0x2F, 0x604000, 0x1F, 4, 1);
-	HAL_Delay(100);
-
-// Reset of the start bit
-	CANopenSendSDO(1,0x2F, 0x604000, 0x0F, 4, 1);
-	HAL_Delay(100);
+canopen_app_user_config(&canopenNode_1);
+//read_SDO(canopenNode_1.canOpenStack->SDOclient, 0x01, 0x1000, 0x00, &tmp, 4, &amount_read);
+//HAL_Delay(30);
+//read_SDO(canopenNode_1.canOpenStack->SDOclient, 2, 0x6081, 0x00	, &tmp, 4, &amount_read);
+//HAL_Delay(30);
+//read_SDO(canopenNode_1.canOpenStack->SDOclient, 1, 0x6060, 0x00	, &tmp, 1, &amount_read);
+//HAL_Delay(30);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -236,18 +147,14 @@ if(HAL_FDCAN_Start(&hfdcan1)!= HAL_OK)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-//	  TxData[0] = 0x23;
-//	  TxData[1] = 0x11;
-//	  TxData[2] = 0x10;
-//	  TxData[3] = 0x01;
-//	  TxData[4] = 0x6C;
-//	  TxData[5] = 0x6F;
-//	  TxData[6] = 0x61;
-//	  TxData[7] = 0x64;
-//	  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, TxData);
-//	  CANopenSendSDO(1,0x22, 0x60FF00, 0xFFFF, 0, 1);
-	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_8);
-	  HAL_Delay(1000);
+	  canopen_app_process();
+	  CO_PDO_execute(&canopenNode_1);
+
+//	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_8);
+//	  response_print("number: %d %s\n", 23, "hieu");
+//	  response_print("number: %d %s\n", 24, "vu minh hieu");
+//	  response_print("number: %d %s\n", 23, "hieu");
+//	  response_print("number: %d %s\n", 24, "vu minh hieu");
   }
   /* USER CODE END 3 */
 }
@@ -274,19 +181,22 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_HSI
+                              |RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 4;
-  RCC_OscInitStruct.PLL.PLLN = 9;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 2;
+  RCC_OscInitStruct.PLL.PLLN = 12;
   RCC_OscInitStruct.PLL.PLLP = 2;
   RCC_OscInitStruct.PLL.PLLQ = 3;
   RCC_OscInitStruct.PLL.PLLR = 2;
   RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_3;
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOMEDIUM;
-  RCC_OscInitStruct.PLL.PLLFRACN = 3072;
+  RCC_OscInitStruct.PLL.PLLFRACN = 0;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -344,7 +254,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.StdFiltersNbr = 1;
   hfdcan1.Init.ExtFiltersNbr = 0;
   hfdcan1.Init.RxFifo0ElmtsNbr = 64;
-  hfdcan1.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_8;
+  hfdcan1.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_12;
   hfdcan1.Init.RxFifo1ElmtsNbr = 0;
   hfdcan1.Init.RxFifo1ElmtSize = FDCAN_DATA_BYTES_8;
   hfdcan1.Init.RxBuffersNbr = 0;
@@ -353,7 +263,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.TxBuffersNbr = 0;
   hfdcan1.Init.TxFifoQueueElmtsNbr = 1;
   hfdcan1.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
-  hfdcan1.Init.TxElmtSize = FDCAN_DATA_BYTES_8;
+  hfdcan1.Init.TxElmtSize = FDCAN_DATA_BYTES_12;
   if (HAL_FDCAN_Init(&hfdcan1) != HAL_OK)
   {
     Error_Handler();
@@ -364,8 +274,8 @@ FDCAN_FilterTypeDef sFilterConfig;
   sFilterConfig.IdType = FDCAN_STANDARD_ID;
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
-  sFilterConfig.FilterID1 = 0x581;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_DISABLE; //FDCAN_FILTER_TO_RXFIFO0
+  sFilterConfig.FilterID1 = 0x0;
   sFilterConfig.FilterID2 = 0x7FF;
   sFilterConfig.RxBufferIndex = 0;
   if (HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig) != HAL_OK)
@@ -373,22 +283,65 @@ FDCAN_FilterTypeDef sFilterConfig;
     /* Filter configuration Error */
     Error_Handler();
   }
-  /**
-  void CanOpen::fdcanConfigureFilter() {
-  	FDCAN_FilterTypeDef sFilterConfig;
-  	sFilterConfig.IdType = FDCAN_STANDARD_ID;
-  	sFilterConfig.FilterIndex = 0;
-  	sFilterConfig.FilterType = FDCAN_FILTER_MASK;
-  	sFilterConfig.FilterConfig = FDCAN_FILTER_DISABLE;
-  	sFilterConfig.FilterID1 = 0;
-  	sFilterConfig.FilterID2 = 0x7FF;
-  	if (HAL_FDCAN_ConfigFilter(fdcanHandler, &sFilterConfig) != HAL_OK) {
-  		// Filter configuration Error
-  		fdcanErrorHandler();
-  	}
-  }
-  **/
   /* USER CODE END FDCAN1_Init 2 */
+
+}
+
+/**
+  * @brief RNG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RNG_Init(void)
+{
+
+  /* USER CODE BEGIN RNG_Init 0 */
+
+  /* USER CODE END RNG_Init 0 */
+
+  /* USER CODE BEGIN RNG_Init 1 */
+
+  /* USER CODE END RNG_Init 1 */
+  hrng.Instance = RNG;
+  hrng.Init.ClockErrorDetection = RNG_CED_ENABLE;
+  if (HAL_RNG_Init(&hrng) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RNG_Init 2 */
+
+  /* USER CODE END RNG_Init 2 */
+
+}
+
+/**
+  * @brief TIM14 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM14_Init(void)
+{
+
+  /* USER CODE BEGIN TIM14_Init 0 */
+
+  /* USER CODE END TIM14_Init 0 */
+
+  /* USER CODE BEGIN TIM14_Init 1 */
+
+  /* USER CODE END TIM14_Init 1 */
+  htim14.Instance = TIM14;
+  htim14.Init.Prescaler = 63;
+  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim14.Init.Period = 1000;
+  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM14_Init 2 */
+
+  /* USER CODE END TIM14_Init 2 */
 
 }
 
@@ -405,6 +358,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
@@ -419,35 +373,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-/*
- * typedef enum {
-	INDEX_MANUFACTURER_DEVICE_NAME = 0x1008U,
-	INDEX_MANUFACTURER_HARDWARE_VERSION = 0x1009U,
-	INDEX_MANUFACTURER_SOFTWARE_VERSION = 0x1010U,
-	INDEX_CONTROLWORD = 0x6040U,
-	INDEX_STATUSWORD = 0x6041U,
-	INDEX_OPERATION_MODE = 0x6060U,
-	INDEX_ACTUAL_POSITION = 0x6064U,
-	INDEX_TARGET_TORQUE = 0x6071U,
-	INDEX_TORQUE_SLOPE = 0x6087U,
-	INDEX_TORQUE_PROFILE_TYPE = 0x6088U,
-	INDEX_CYCLE_PERIOD = 0x1006U,
-	INDEX_SYNC_WINDOW = 0x1007U,
-	INDEX_SYNC_COUNTER_OVERFLOW = 0x1019U,
-	RPDO1_COMMUNICATION_PARAMETER = 0x1400U,
-	RPDO2_COMMUNICATION_PARAMETER = 0x1401U,
-	RPDO1_MAPPING = 0x1600U,
-	RPDO2_MAPPING = 0x1601U,
-	TPDO1_COMMUNICATION_PARAMETER = 0x1800U,
-	TPDO2_COMMUNICATION_PARAMETER = 0x1801U,
-	TPDO1_MAPPING = 0x1A00U,
-	TPDO2_MAPPING = 0x1A01U,
-//	CIA_DS301
-	INDEX_CONTROL_MODE_DS301 = 0x2002U,
-	INDEX_PLC_DS301 = 0x2004U,
-	INDEX_MONITOR_DS301 = 0x2005U,
-} OBJECT_INDEX;
- */
+
 /* USER CODE END 4 */
 
 /**

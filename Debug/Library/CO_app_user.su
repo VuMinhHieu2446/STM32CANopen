@@ -1,0 +1,2 @@
+../Library/CO_app_user.c:3:6:canopen_app_user_init	24	static
+../Library/CO_app_user.c:17:6:canopen_app_user_config	16	static

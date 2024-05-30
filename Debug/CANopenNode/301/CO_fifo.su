@@ -1,0 +1,3 @@
+../CANopenNode/301/CO_fifo.c:55:6:CO_fifo_init	24	static
+../CANopenNode/301/CO_fifo.c:83:8:CO_fifo_write	40	static
+../CANopenNode/301/CO_fifo.c:130:8:CO_fifo_read	40	static

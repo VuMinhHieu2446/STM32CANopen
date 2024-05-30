@@ -9,9 +9,23 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include USB_DEVICE/Target/subdir.mk
+-include USB_DEVICE/App/subdir.mk
+-include Middlewares/ST/STM32_USB_Device_Library/Core/Src/subdir.mk
+-include Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/subdir.mk
+-include Library/subdir.mk
 -include Drivers/STM32H7xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
+-include CANopenNode_STM32/subdir.mk
+-include CANopenNode/storage/subdir.mk
+-include CANopenNode/extra/subdir.mk
+-include CANopenNode/309/subdir.mk
+-include CANopenNode/305/subdir.mk
+-include CANopenNode/304/subdir.mk
+-include CANopenNode/303/subdir.mk
+-include CANopenNode/301/subdir.mk
+-include CANopenNode/subdir.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)

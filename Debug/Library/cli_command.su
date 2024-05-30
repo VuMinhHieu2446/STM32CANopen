@@ -1,0 +1,2 @@
+../Library/cli_command.c:7:27:find_command_info	24	static
+../Library/cli_command.c:53:6:cli_command_excute	72	static

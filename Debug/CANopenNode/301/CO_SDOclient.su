@@ -1,0 +1,16 @@
+D:/CANopen/Project/Loop_back/CANopenNode/301/CO_ODinterface.h:439:24:OD_getIndex	16	static
+D:/CANopen/Project/Loop_back/CANopenNode/301/CO_ODinterface.h:650:21:OD_get_u8	32	static
+D:/CANopen/Project/Loop_back/CANopenNode/301/CO_ODinterface.h:664:21:OD_get_u32	32	static
+D:/CANopen/Project/Loop_back/CANopenNode/301/CO_fifo.h:102:20:CO_fifo_reset	16	static
+D:/CANopen/Project/Loop_back/CANopenNode/301/CO_fifo.h:157:22:CO_fifo_getOccupied	24	static
+../CANopenNode/301/CO_SDOclient.c:63:13:CO_SDOclient_receive	32	static
+../CANopenNode/301/CO_SDOclient.c:250:18:CO_SDOclient_init	40	static
+../CANopenNode/301/CO_SDOclient.c:359:17:CO_SDOclient_setup	48	static
+../CANopenNode/301/CO_SDOclient.c:432:17:CO_SDOclientDownloadInitiate	24	static
+../CANopenNode/301/CO_SDOclient.c:483:6:CO_SDOclientDownloadInitiateSize	16	static
+../CANopenNode/301/CO_SDOclient.c:500:8:CO_SDOclientDownloadBufWrite	32	static
+../CANopenNode/301/CO_SDOclient.c:513:17:CO_SDOclientDownload	48	static
+../CANopenNode/301/CO_SDOclient.c:1105:17:CO_SDOclientUploadInitiate	24	static
+../CANopenNode/301/CO_SDOclient.c:1157:17:CO_SDOclientUpload	48	static
+../CANopenNode/301/CO_SDOclient.c:1817:8:CO_SDOclientUploadBufRead	32	static
+../CANopenNode/301/CO_SDOclient.c:1830:6:CO_SDOclientClose	16	static

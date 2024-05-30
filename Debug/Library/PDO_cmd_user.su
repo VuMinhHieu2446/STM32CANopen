@@ -1,0 +1,8 @@
+../Library/PDO_cmd_user.c:6:6:Random_position	16	static
+../Library/PDO_cmd_user.c:16:18:Send_PDOPosition	24	static
+../Library/PDO_cmd_user.c:29:18:Send_PDOControlWord	24	static
+../Library/PDO_cmd_user.c:42:6:CO_PDO_running	32	static
+../Library/PDO_cmd_user.c:68:6:store_to_buffer	24	static
+../Library/PDO_cmd_user.c:73:10:chartohex	24	static
+../Library/PDO_cmd_user.c:86:6:running_servo	16	static
+../Library/PDO_cmd_user.c:107:6:CO_PDO_execute	16	static
